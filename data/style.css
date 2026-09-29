@@ -1,0 +1,945 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+html {
+    touch-action: pan-x pan-y;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, "Microsoft YaHei", sans-serif;
+    background: linear-gradient(135deg, #adadad 0%, #827f85 100%);
+    min-height: 100vh;
+    padding: 0;
+    color: #333;
+    overscroll-behavior: none;
+}
+
+/* ========== Status bar ========== */
+.status-bar {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    padding: 12px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.status-indicator {
+    font-size: 16px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.status-online {
+    color: #22c55e;
+}
+
+.status-offline {
+    color: #ef4444;
+}
+
+.status-info {
+    display: flex;
+    gap: 15px;
+    font-size: 13px;
+    color: #666;
+}
+
+.status-info span strong {
+    color: #333;
+    font-weight: 600;
+}
+
+.wifi-signal[data-quality="excellent"] { color: #16a34a; }
+.wifi-signal[data-quality="good"] { color: #65a30d; }
+.wifi-signal[data-quality="fair"] { color: #d97706; }
+.wifi-signal[data-quality="weak"] { color: #dc2626; }
+
+.status-right {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.emergency-stop-btn {
+    min-height: 38px;
+    padding: 8px 13px;
+    border: 0;
+    border-radius: 9px;
+    background: #dc2626;
+    color: white;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    box-shadow: 0 2px 7px rgba(220, 38, 38, 0.4);
+    white-space: nowrap;
+}
+
+.emergency-stop-btn:hover:not(:disabled) { background: #b91c1c; }
+.emergency-stop-btn:active:not(:disabled) { transform: scale(0.96); }
+.emergency-stop-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.lang-switch {
+    display: inline-flex;
+    padding: 2px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: #f3f4f6;
+}
+
+.lang-btn {
+    border: 0;
+    border-radius: 6px;
+    padding: 5px 9px;
+    background: transparent;
+    color: #6b7280;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.lang-btn.active {
+    background: #667eea;
+    color: white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+
+/* ========== Main container ========== */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+h1 {
+    text-align: center;
+    color: white;
+    margin: 0 0 20px 0;
+    font-size: 26px;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+}
+
+/* ========== Control grid ========== */
+.control-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(23%, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.control-card {
+    background: #333;
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    transition: transform 0.2s;
+}
+
+.control-card:hover {
+    transform: translateY(-2px);
+}
+
+.control-card h3 {
+    text-align: center;
+    color: #667eea;
+    font-size: 18px;
+    margin-bottom: 15px;
+    font-weight: 600;
+}
+
+/* ========== Control buttons ========== */
+.control-buttons {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.control-buttons.tt-motor,
+.control-buttons.servo-360,
+.control-buttons.servo-180 {
+    grid-template-columns: repeat(2, 1fr); 
+}
+
+.ctrl-btn {
+    padding: 20px;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.15);
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 70px;
+}
+
+.ctrl-btn .btn-icon {
+    font-size: 28px;
+}
+
+.ctrl-btn .btn-label {
+    font-size: 16px;
+}
+
+.ctrl-btn:active {
+    transform: scale(0.97);
+}
+
+.ctrl-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* TT motor button colors */
+.ctrl-forward {
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    color: white;
+}
+
+.ctrl-forward:hover:not(:disabled) {
+    background: linear-gradient(135deg, #16a34a, #15803d);
+}
+
+.ctrl-reverse {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: white;
+}
+
+.ctrl-reverse:hover:not(:disabled) {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+}
+
+/* 360-degree servo button colors */
+.ctrl-cw {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: white;
+}
+
+.ctrl-cw:hover:not(:disabled) {
+    background: linear-gradient(135deg, #d97706, #b45309);
+}
+
+.ctrl-ccw {
+    background: linear-gradient(135deg, #06b6d4, #0891b2);
+    color: white;
+}
+
+.ctrl-ccw:hover:not(:disabled) {
+    background: linear-gradient(135deg, #0891b2, #0e7490);
+}
+
+/* 180-degree servo button colors */
+.ctrl-left {
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+    color: white;
+}
+
+.ctrl-left:hover:not(:disabled) {
+    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+}
+
+.ctrl-right {
+    background: linear-gradient(135deg, #ec4899, #db2777);
+    color: white;
+}
+
+.ctrl-right:hover:not(:disabled) {
+    background: linear-gradient(135deg, #db2777, #be185d);
+}
+
+.ctrl-center {
+    background: linear-gradient(135deg, #64748b, #475569);
+    color: white;
+}
+
+.ctrl-center:hover:not(:disabled) {
+    background: linear-gradient(135deg, #475569, #334155);
+}
+
+/* Stop buttons */
+.ctrl-stop {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: white;
+}
+
+.ctrl-stop:hover:not(:disabled) {
+    background: linear-gradient(135deg, #dc2626, #b91c1c);
+}
+
+/* Status text */
+.status-text {
+    text-align: center;
+    padding: 10px;
+    background: #f3f4f6;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #667eea;
+    font-weight: 600;
+}
+
+/* ========== Collapsible settings panel ========== */
+.settings-panel {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+
+.settings-header {
+    padding: 18px 20px;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    user-select: none;
+    transition: background 0.3s;
+}
+
+.settings-header:hover {
+    background: linear-gradient(135deg, #5568d3, #6a3f91);
+}
+
+.settings-icon {
+    font-size: 22px;
+}
+
+.settings-title {
+    flex: 1;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.settings-arrow {
+    font-size: 14px;
+    transition: transform 0.3s;
+}
+
+.settings-arrow.expanded {
+    transform: rotate(180deg);
+}
+
+.settings-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease-out;
+}
+
+.settings-content.expanded {
+    max-height: 2000px;
+}
+
+/* Settings groups */
+.setting-group {
+    padding: 20px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.setting-group:last-child {
+    border-bottom: none;
+}
+
+.setting-group h4 {
+    color: #667eea;
+    font-size: 16px;
+    margin-bottom: 15px;
+    font-weight: 600;
+}
+
+.setting-item {
+    margin-bottom: 20px;
+}
+
+.setting-item:last-child {
+    margin-bottom: 0;
+}
+
+.setting-item label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #555;
+    font-size: 14px;
+}
+
+.setting-item label span {
+    color: #667eea;
+    font-size: 16px;
+    margin-left: 5px;
+}
+
+/* Range inputs */
+input[type="range"] {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: #e5e7eb;
+    outline: none;
+    -webkit-appearance: none;
+    margin: 10px 0;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #667eea;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(102, 126, 234, 0.5);
+}
+
+input[type="range"]::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #667eea;
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 2px 6px rgba(102, 126, 234, 0.5);
+}
+
+input[type="range"]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.range-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #999;
+    margin-top: 5px;
+}
+
+/* ========== Responsive layout ========== */
+@media (max-width: 768px) {
+    .container {
+        padding: 15px;
+    }
+    
+    h1 {
+        font-size: 22px;
+        margin-bottom: 15px;
+    }
+    
+    .control-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+    
+    .status-bar {
+        flex-direction: column;
+        gap: 8px;
+        padding: 10px 15px;
+    }
+    
+    .status-info {
+        width: 100%;
+        justify-content: space-between;
+        font-size: 12px;
+        gap: 10px;
+    }
+
+    .status-right {
+        width: 100%;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    
+    .ctrl-btn {
+        min-height: 65px;
+        padding: 15px;
+    }
+    
+    .ctrl-btn .btn-icon {
+        font-size: 24px;
+    }
+    
+    .ctrl-btn .btn-label {
+        font-size: 14px;
+    }
+}
+
+@media (max-width: 480px) {
+    .ctrl-btn .btn-label {
+        display: none;
+    }
+    
+    .ctrl-btn .btn-icon {
+        font-size: 32px;
+    }
+    
+    .status-info span {
+        font-size: 11px;
+    }
+}
+
+/* ========== Four-column phone landscape layout ========== */
+@media (orientation: landscape) and (max-width: 926px) {
+    /* Force a four-column layout. */
+    .control-grid {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+        margin-bottom: 15px;
+    }
+    
+    /* Reduce card padding. */
+    .control-card {
+        padding: 12px;
+        border-radius: 12px;
+    }
+    
+    /* Reduce heading size. */
+    .control-card h3 {
+        font-size: 14px;
+        margin-bottom: 8px;
+        padding-bottom: 6px;
+    }
+    
+    /* Reduce button spacing. */
+    .control-buttons {
+        gap: 6px;
+        margin-bottom: 8px;
+    }
+    
+    /* Reduce regular button size. */
+    .ctrl-btn {
+        padding: 10px 8px;
+        min-height: 50px;
+        border-radius: 8px;
+    }
+    
+    /* Reduce button icon size. */
+    .ctrl-btn .btn-icon {
+        font-size: 20px;
+    }
+    
+    /* Reduce button label size. */
+    .ctrl-btn .btn-label {
+        font-size: 13px;
+    }
+    
+    /* Keep stop buttons compact. */
+    .ctrl-stop {
+        padding: 6px;
+        min-height: 42px;
+    }
+    
+    .ctrl-stop .btn-icon {
+        font-size: 16px;
+    }
+    
+    .ctrl-stop .btn-label {
+        font-size: 11px;
+    }
+    
+    /* Reduce status text. */
+    .status-text {
+        padding: 6px;
+        font-size: 12px;
+        border-radius: 6px;
+    }
+    
+    /* Reduce the status bar. */
+    .status-bar {
+        padding: 8px 15px;
+    }
+    
+    .status-indicator {
+        font-size: 14px;
+    }
+    
+    .status-info {
+        font-size: 11px;
+        gap: 10px;
+    }
+    
+    /* Reduce the page title. */
+    h1 {
+        font-size: 20px;
+        margin: 10px 0 15px 0;
+    }
+    
+    /* Reduce the settings header. */
+    .settings-header {
+        padding: 12px 15px;
+    }
+    
+    .settings-icon {
+        font-size: 18px;
+    }
+    
+    .settings-title {
+        font-size: 15px;
+    }
+    
+    .settings-arrow {
+        font-size: 12px;
+    }
+}
+
+/* ========== Small landscape screens (for example, iPhone SE at 568px) ========== */
+@media (orientation: landscape) and (max-width: 667px) {
+    /* Show icons only on very small screens. */
+    .ctrl-btn .btn-label {
+        display: none;
+    }
+    
+    /* Enlarge icons for easier tapping. */
+    .ctrl-btn .btn-icon {
+        font-size: 24px;
+    }
+    
+    /* Stop button icon */
+    .ctrl-stop .btn-icon {
+        font-size: 20px;
+    }
+    
+    /* Further reduce card size. */
+    .control-card {
+        padding: 10px;
+    }
+    
+    .control-card h3 {
+        font-size: 13px;
+        margin-bottom: 6px;
+    }
+    
+    /* Reduce button size. */
+    .ctrl-btn {
+        padding: 8px;
+        min-height: 45px;
+    }
+    
+    .ctrl-stop {
+        min-height: 38px;
+    }
+    
+    /* Reduce status text. */
+    .status-text {
+        font-size: 11px;
+        padding: 5px;
+    }
+    
+    /* Reduce grid spacing. */
+    .control-grid {
+        gap: 8px;
+    }
+    
+    /* Reduce the status bar. */
+    .status-bar {
+        padding: 6px 12px;
+    }
+    
+    .status-indicator {
+        font-size: 13px;
+    }
+    
+    .status-info {
+        font-size: 10px;
+        gap: 8px;
+    }
+    
+    /* Reduce the title to save space. */
+    h1 {
+        font-size: 18px;
+        margin: 8px 0 12px 0;
+    }
+}
+
+/* ========== Medium landscape screens (668px to 926px) ========== */
+@media (orientation: landscape) and (min-width: 668px) and (max-width: 926px) {
+    /* Keep labels visible while using compact spacing. */
+    .control-grid {
+        gap: 10px;
+    }
+    
+    .control-card {
+        padding: 12px;
+    }
+}
+
+/* --- Remote-control layout variables --- */
+:root {
+    --rc-gap: 4px;             /* Four-pixel black gap */
+    --rc-btn-color: #e0e0e0;   
+    --rc-accent-red: #ff3b30;  
+    --rc-panel-h: 120px;       /* Total control height */
+}
+
+/* --- Shared remote-control layout --- */
+:root {
+    --rc-gap: 4px;             /* Four-pixel black gap */
+    --rc-accent-red: #ff3b30;  
+    --rc-panel-h: 110px;       /* Reduced height for mobile screens */
+}
+
+/* Remote-control panel */
+.rc-panel {
+    position: relative;
+    width: 100%;
+    max-width: 240px;
+    height: var(--rc-panel-h);
+    background-color: #000;    /* The black background forms the gaps. */
+    margin: 10px auto;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+}
+
+.rc-btn {
+    position: absolute;
+    border: none;
+    outline: none;
+    cursor: pointer;
+    background: linear-gradient(180deg, #ffffff 0%, #cecece 100%);
+    transition: all 0.1s ease;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+}
+
+/* Pressed state */
+.rc-btn:active {
+    transform: translateY(2px);
+    background: linear-gradient(180deg, #b0b0b0 0%, #e0e0e0 100%);
+    filter: brightness(0.9);
+}
+
+.rc-btn:active .rc-icon {
+    filter: drop-shadow(0 0 5px rgba(255, 59, 48, 0.6));
+}
+
+/* Side-button masks */
+.rc-btn-side {
+    width: calc(50% - (var(--rc-gap) / 2));
+    height: 100%;
+}
+
+.rc-btn-left {
+    left: 0;
+    -webkit-mask-image: radial-gradient(circle at calc(100% + 2px) 100%, transparent 54px, black 55px);
+    mask-image: radial-gradient(circle at calc(100% + 2px) 100%, transparent 54px, black 55px);
+}
+
+.rc-btn-right {
+    right: 0;
+    -webkit-mask-image: radial-gradient(circle at -2px 100%, transparent 54px, black 55px);
+    mask-image: radial-gradient(circle at -2px 100%, transparent 54px, black 55px);
+}
+
+/* Center semicircle button */
+.rc-btn-center {
+    width: 100px;
+    height: 50px;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    border-radius: 50px 50px 0 0;
+    z-index: 10;
+}
+
+.rc-btn-center:active {
+    transform: translateX(-50%) translateY(2px);
+}
+
+/* Icon details */
+.rc-icon { transition: all 0.1s; fill: var(--rc-accent-red); }
+
+.rc-arrow-svg { width: 32px; height: 32px; }
+
+/* Icon offsets for optical centering */
+.rc-btn-left .rc-icon { margin-right: 40px; margin-bottom: 20px; }
+.rc-btn-right .rc-icon { margin-left: 40px; margin-bottom: 20px; }
+
+/* Stop and center symbols */
+.rc-stop-box {
+    width: 18px; height: 18px;
+    border: 4px solid var(--rc-accent-red);
+    border-radius: 2px;
+}
+.rc-dot-box {
+    width: 16px; height: 16px;
+    background-color: var(--rc-accent-red);
+    border-radius: 50%;
+}
+
+/* Reduce the panel height on narrow screens. */
+@media (max-width: 480px) {
+    :root { --rc-panel-h: 100px; }
+    .rc-btn-center { width: 90px; height: 45px; }
+}
+
+.wifi-current {
+    margin-bottom: 16px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: #eef2ff;
+    color: #4338ca;
+    font-size: 13px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.wifi-settings select,
+.wifi-settings input[type="text"],
+.wifi-settings input[type="password"] {
+    width: 100%;
+    min-height: 42px;
+    padding: 9px 11px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: white;
+    color: #333;
+    font-size: 16px;
+    outline: none;
+}
+
+.wifi-settings select:focus,
+.wifi-settings input:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+}
+
+.password-row,
+.ssid-row {
+    display: flex;
+    gap: 8px;
+}
+
+.password-row input,
+.ssid-row input {
+    flex: 1;
+    min-width: 0;
+}
+
+.wifi-scan-results {
+    max-height: 220px;
+    margin-top: 8px;
+    overflow-y: auto;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: white;
+}
+
+.wifi-scan-results.status-only {
+    padding: 11px;
+    color: #6b7280;
+    font-size: 13px;
+}
+
+.wifi-scan-results.error {
+    color: #dc2626;
+}
+
+.wifi-network-option {
+    width: 100%;
+    padding: 10px 12px;
+    border: 0;
+    border-bottom: 1px solid #e5e7eb;
+    background: white;
+    color: #333;
+    text-align: left;
+    cursor: pointer;
+}
+
+.wifi-network-option:last-child {
+    border-bottom: 0;
+}
+
+.wifi-network-option:hover,
+.wifi-network-option:focus-visible {
+    background: #eef2ff;
+    outline: none;
+}
+
+.wifi-network-name,
+.wifi-network-details {
+    display: block;
+    overflow-wrap: anywhere;
+}
+
+.wifi-network-name {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.wifi-network-details {
+    margin-top: 3px;
+    color: #6b7280;
+    font-size: 12px;
+}
+
+.wifi-note {
+    margin: 4px 0 14px;
+    color: #6b7280;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.wifi-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.primary-btn,
+.secondary-btn,
+.danger-btn {
+    min-height: 40px;
+    padding: 9px 14px;
+    border: 0;
+    border-radius: 8px;
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.primary-btn { background: #667eea; }
+.secondary-btn { background: #64748b; white-space: nowrap; }
+.danger-btn { background: #dc2626; }
+
+.primary-btn:disabled,
+.secondary-btn:disabled,
+.danger-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.wifi-message {
+    min-height: 20px;
+    margin-top: 10px;
+    color: #16a34a;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.wifi-message.error { color: #dc2626; }
