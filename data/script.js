@@ -199,7 +199,7 @@ function loadSettings() {
 
 // ========== WebSocket initialization ==========
 function initWebSocket() {
-    const wsUrl = `ws://${window.location.hostname}:81`;
+    const wsUrl = `ws://${window.location.hostname}/ws`;
     console.log('连接WebSocket:', wsUrl);
     
     ws = new WebSocket(wsUrl);
