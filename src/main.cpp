@@ -3,7 +3,7 @@
 #include <DNSServer.h>
 #include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
-#include <WebSocketsServer.h>
+#include <AsyncWebSocket.h>
 
 #include <Servo.h>
 #include <LittleFS.h>
@@ -53,7 +53,7 @@ Servo servo3;
 
 // ========== Server instances ==========
 AsyncWebServer server(80);
-WebSocketsServer webSocket(81);
+AsyncWebSocket ws("/ws");
 DNSServer dnsServer;
 
 // ========== Actuator state ==========
@@ -100,8 +100,8 @@ bool connectToLocalWiFi(const String &ssid, const String &password);
 void setupWebServer();
 void setupWebSocket();
 void redirectToControlPage(AsyncWebServerRequest *request);
-void handleWebSocketMessage(uint8_t num, uint8_t* payload, size_t length);
-void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
+void handleWebSocketMessage(uint32_t clientId, uint8_t* payload, size_t length);
+void onWsEvent(AsyncWebSocket * serverPtr, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len);
 void printResetReason();
 void checkServo1AutoStop();
 void checkServo2AutoStop();
@@ -121,7 +121,7 @@ void startMotor(int speed, int duration, bool autoStop, bool forward);
 void stopMotor();
 void stopAllMotors(const char *reason);
 void broadcastMotorStopped(const char *motor, const char *reason);
-void sendCommandError(uint8_t num, const char *error);
+void sendCommandError(uint32_t clientId, const char *error);
 void setServo3Angle(int angle);
 void updateNetworkLEDs(bool networkReady);
 void checkInactivitySleep();
@@ -224,9 +224,6 @@ void loop() {
   // Process captive-portal DNS requests in AP mode.
   if (activeWiFiMode == "AP") dnsServer.processNextRequest();
 
-  // Process WebSocket events.
-  webSocket.loop();
-  
   // Enforce actuator run limits.
   updateMotorRamp();
   checkServo1AutoStop();
@@ -545,48 +542,50 @@ void setupWebServer() {
   Serial.println("[OK] Web server started on port 80");
 }
 
-// ========== WebSocket server ==========
+// ========== WebSocket server (Async) ==========
 void setupWebSocket() {
-  webSocket.begin();
-  webSocket.onEvent(webSocketEvent);
-  Serial.println("[OK] WebSocket server started on port 81");
+  ws.onEvent(onWsEvent);
+  server.addHandler(&ws);
+  Serial.println("[OK] Async WebSocket registered at /ws");
 }
 
-// ========== WebSocket event handling ==========
-void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
-  switch(type) {
-    case WStype_DISCONNECTED:
-      Serial.printf("[%u] Client disconnected\n", num);
+// ========== AsyncWebSocket event handling ==========
+void onWsEvent(AsyncWebSocket * serverPtr, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len) {
+  switch (type) {
+    case WS_EVT_CONNECT:
+      Serial.printf("[%u] Client connected: %s\n", client->id(), client->remoteIP().toString().c_str());
+      break;
+    case WS_EVT_DISCONNECT:
+      Serial.printf("[%u] Client disconnected\n", client->id());
       stopAllMotors("websocket_disconnected");
       break;
-      
-    case WStype_CONNECTED:
-      {
-        IPAddress ip = webSocket.remoteIP(num);
-        Serial.printf("[%u] Client connected: %s\n", num, ip.toString().c_str());
+    case WS_EVT_DATA: {
+      AwsFrameInfo * info = (AwsFrameInfo*)arg;
+      if (info->opcode == WS_TEXT) {
+        handleWebSocketMessage(client->id(), data, len);
       }
       break;
-      
-    case WStype_TEXT:
-      handleWebSocketMessage(num, payload, length);
+    }
+    case WS_EVT_PONG:
+    case WS_EVT_ERROR:
       break;
   }
 }
 
-// ========== WebSocket message handling ==========
-void handleWebSocketMessage(uint8_t num, uint8_t* payload, size_t length) {
+// ========== WebSocket message handling (adapted) ==========
+void handleWebSocketMessage(uint32_t clientId, uint8_t* payload, size_t length) {
   // Parse the JSON command.
   StaticJsonDocument<384> doc;
   DeserializationError error = deserializeJson(doc, payload, length);
   
   if (error) {
     Serial.println("[ERROR] Failed to parse JSON");
-    sendCommandError(num, "invalid_json");
+    sendCommandError(clientId, "invalid_json");
     return;
   }
 
   if (!doc["type"].is<const char*>()) {
-    sendCommandError(num, "missing_type");
+    sendCommandError(clientId, "missing_type");
     return;
   }
 
@@ -597,7 +596,7 @@ void handleWebSocketMessage(uint8_t num, uint8_t* payload, size_t length) {
   // Dispatch validated actuator commands.
   if (type == "run_duration") {
     if (!validMotor || !doc["speed"].is<int>() || !doc["duration"].is<int>()) {
-      sendCommandError(num, "invalid_run_command");
+      sendCommandError(clientId, "invalid_run_command");
       return;
     }
 
@@ -606,7 +605,7 @@ void handleWebSocketMessage(uint8_t num, uint8_t* payload, size_t length) {
     bool validSpeed = motor == "motor" ? speed >= 0 && speed <= 255 : speed >= 0 && speed <= 180;
     if (!validSpeed || duration < 1 || duration > (int)MAX_TIMED_RUN_MS ||
         (motor == "motor" && !doc["forward"].is<bool>())) {
-      sendCommandError(num, "out_of_range");
+      sendCommandError(clientId, "out_of_range");
       return;
     }
 
@@ -628,14 +627,14 @@ void handleWebSocketMessage(uint8_t num, uint8_t* payload, size_t length) {
   }
   else if (type == "start_continuous") {
     if (!validMotor || !doc["speed"].is<int>()) {
-      sendCommandError(num, "invalid_run_command");
+      sendCommandError(clientId, "invalid_run_command");
       return;
     }
 
     int speed = doc["speed"].as<int>();
     bool validSpeed = motor == "motor" ? speed >= 0 && speed <= 255 : speed >= 0 && speed <= 180;
     if (!validSpeed || (motor == "motor" && !doc["forward"].is<bool>())) {
-      sendCommandError(num, "out_of_range");
+      sendCommandError(clientId, "out_of_range");
       return;
     }
 
@@ -657,7 +656,7 @@ void handleWebSocketMessage(uint8_t num, uint8_t* payload, size_t length) {
   }
   else if (type == "stop") {
     if (!validMotor) {
-      sendCommandError(num, "invalid_motor");
+      sendCommandError(clientId, "invalid_motor");
       return;
     }
 
@@ -676,12 +675,12 @@ void handleWebSocketMessage(uint8_t num, uint8_t* payload, size_t length) {
   }
   else if (type == "servo180") {
     if (!doc["angle"].is<int>()) {
-      sendCommandError(num, "invalid_angle");
+      sendCommandError(clientId, "invalid_angle");
       return;
     }
     int angle = doc["angle"].as<int>();
     if (angle < 0 || angle > 180) {
-      sendCommandError(num, "out_of_range");
+      sendCommandError(clientId, "out_of_range");
       return;
     }
     setServo3Angle(angle);
@@ -694,7 +693,7 @@ void handleWebSocketMessage(uint8_t num, uint8_t* payload, size_t length) {
     lastMotionKeepalive = millis();
   }
   else {
-    sendCommandError(num, "unknown_type");
+    sendCommandError(clientId, "unknown_type");
     return;
   }
 
@@ -750,7 +749,7 @@ void sendHeartbeatIfNeeded() {
 }
 
 void sendHeartbeat() {
-  if (webSocket.connectedClients() == 0) return;
+  if (ws.count() == 0) return;
   
   StaticJsonDocument<384> doc;
   doc["type"] = "heartbeat";
@@ -767,7 +766,7 @@ void sendHeartbeat() {
   
   String json;
   serializeJson(doc, json);
-  webSocket.broadcastTXT(json);
+  ws.textAll(json);
 }
 
 // Return the average RSSI of connected AP clients, or zero when unavailable.
@@ -870,7 +869,7 @@ void stopAllMotors(const char *reason) {
   doc["reason"] = reason;
   String json;
   serializeJson(doc, json);
-  webSocket.broadcastTXT(json);
+  ws.textAll(json);
 }
 
 void broadcastMotorStopped(const char *motor, const char *reason) {
@@ -880,16 +879,16 @@ void broadcastMotorStopped(const char *motor, const char *reason) {
   doc["reason"] = reason;
   String json;
   serializeJson(doc, json);
-  webSocket.broadcastTXT(json);
+  ws.textAll(json);
 }
 
-void sendCommandError(uint8_t num, const char *error) {
+void sendCommandError(uint32_t clientId, const char *error) {
   StaticJsonDocument<128> doc;
   doc["type"] = "command_error";
   doc["error"] = error;
   String json;
   serializeJson(doc, json);
-  webSocket.sendTXT(num, json);
+  ws.text(clientId, json);
 }
 
 // ========== 180-degree servo control ==========
@@ -913,7 +912,7 @@ void enterDeepSleep() {
   servo3.write(90);
 
   // Shut down network services.
-  webSocket.close();
+  ws.closeAll();
   server.end();
   dnsServer.stop();
   WiFi.softAPdisconnect(true);
@@ -926,4 +925,3 @@ void enterDeepSleep() {
   // Enter deep sleep. An external reset or wake source is required.
   ESP.deepSleep(0);
 }
-
