@@ -1,22 +1,16 @@
 #include <Arduino.h>
-#include <WiFi.h>
+#include <ESP8266WiFi.h>
 #include <DNSServer.h>
-#include <esp_wifi.h>
-
-// Async web server dependencies
+#include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <WebSocketsServer.h>
 
-// Application dependencies
-#include <ESP32Servo.h>
+#include <Servo.h>
 #include <LittleFS.h>
 #include <ArduinoJson.h>
-#include <Preferences.h>
-#include <esp_sleep.h>
-#include <esp_system.h>
 
 // ========== Hardware pins ==========
-#define SERVO1_PIN 2    // 360-degree servo 1
+#define SERVO1_PIN 2    // 360-degree servo 1 (check boot pin constraints)
 #define SERVO2_PIN 3    // 360-degree servo 2
 #define SERVO3_PIN 10   // 180-degree servo
 #define MOTOR_IN1 6     // TT motor
@@ -47,7 +41,6 @@ String savedStaSSID;
 bool configurationPortal = false;
 bool restartRequested = false;
 unsigned long restartAt = 0;
-Preferences preferences;
 
 // Optional fallback network used when no WiFi credentials are stored.
 const char *DEFAULT_STA_SSID = "";
@@ -109,7 +102,6 @@ void setupWebSocket();
 void redirectToControlPage(AsyncWebServerRequest *request);
 void handleWebSocketMessage(uint8_t num, uint8_t* payload, size_t length);
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
-const char *resetReasonText(esp_reset_reason_t reason);
 void printResetReason();
 void checkServo1AutoStop();
 void checkServo2AutoStop();
@@ -136,6 +128,37 @@ void checkInactivitySleep();
 void enterDeepSleep();
 void scheduleRestart();
 
+// ========== Simple config persistence using LittleFS ==========
+bool loadWifiConfig(String &mode, String &ssid, String &password) {
+  if (!LittleFS.exists("/config.json")) return false;
+  File f = LittleFS.open("/config.json", "r");
+  if (!f) return false;
+  DynamicJsonDocument doc(512);
+  DeserializationError err = deserializeJson(doc, f);
+  f.close();
+  if (err) return false;
+  mode = String((const char*)(doc["mode"] | "sta"));
+  ssid = String((const char*)(doc["ssid"] | ""));
+  password = String((const char*)(doc["password"] | ""));
+  return true;
+}
+
+bool saveWifiConfig(const String &mode, const String &ssid, const String &password) {
+  DynamicJsonDocument doc(512);
+  doc["mode"] = mode;
+  doc["ssid"] = ssid;
+  doc["password"] = password;
+  File f = LittleFS.open("/config.json", "w");
+  if (!f) return false;
+  serializeJson(doc, f);
+  f.close();
+  return true;
+}
+
+void clearWifiConfig() {
+  if (LittleFS.exists("/config.json")) LittleFS.remove("/config.json");
+}
+
 // ========== Setup ==========
 void setup() {
   initMotorOutputs();
@@ -144,7 +167,7 @@ void setup() {
   delay(1000);
   
   Serial.println("\n========================================");
-  Serial.println("ESP32-C3 Motor Control System Starting");
+  Serial.println("ESP8266 Motor Control System Starting");
   printResetReason();
   Serial.println("========================================");
   
@@ -153,22 +176,21 @@ void setup() {
   pinMode(LED_D5_PIN, OUTPUT);
   digitalWrite(LED_D4_PIN, HIGH);
   digitalWrite(LED_D5_PIN, HIGH);
-  Serial.println("[OK] D4 (GPIO12) and D5 (GPIO13) LEDs initialized");
+  Serial.println("[OK] D4 and D5 LEDs initialized");
   delay(1000);
   digitalWrite(LED_D4_PIN, LOW);
   digitalWrite(LED_D5_PIN, LOW);
   
-  
   // Mount the web UI filesystem.
-  if (!LittleFS.begin(true)) {
+  if (!LittleFS.begin()) {
     Serial.println("[ERROR] Failed to mount LittleFS");
     return;
   }
   Serial.println("[OK] LittleFS mounted");
   
   // Initialize the servos.
-  servo1.attach(SERVO1_PIN, CONTINUOUS_SERVO_MIN_US, CONTINUOUS_SERVO_MAX_US);
-  servo2.attach(SERVO2_PIN, CONTINUOUS_SERVO_MIN_US, CONTINUOUS_SERVO_MAX_US);
+  servo1.attach(SERVO1_PIN);
+  servo2.attach(SERVO2_PIN);
   servo3.attach(SERVO3_PIN);
   
   servo1.writeMicroseconds(SERVO1_STOP_US);  // Stop
@@ -237,35 +259,21 @@ void loop() {
   checkInactivitySleep();
 }
 
-// ========== WiFi mode ==========
-const char *resetReasonText(esp_reset_reason_t reason) {
-  switch (reason) {
-    case ESP_RST_POWERON: return "POWERON";
-    case ESP_RST_EXT: return "EXT";
-    case ESP_RST_SW: return "SW";
-    case ESP_RST_PANIC: return "PANIC";
-    case ESP_RST_INT_WDT: return "INT_WDT";
-    case ESP_RST_TASK_WDT: return "TASK_WDT";
-    case ESP_RST_WDT: return "WDT";
-    case ESP_RST_DEEPSLEEP: return "DEEPSLEEP";
-    case ESP_RST_BROWNOUT: return "BROWNOUT";
-    case ESP_RST_SDIO: return "SDIO";
-    default: return "UNKNOWN";
-  }
-}
-
+// ========== Reset reason ==========
 void printResetReason() {
-  esp_reset_reason_t reason = esp_reset_reason();
   Serial.print("Last reset reason: ");
-  Serial.println(resetReasonText(reason));
+  Serial.println(ESP.getResetInfo());
 }
 
 void setupWiFi() {
-  preferences.begin("robot-wifi", true);
-  configuredWiFiMode = preferences.getString("mode", "sta");
-  String savedSSID = preferences.getString("ssid", "");
-  String savedPassword = preferences.getString("password", "");
-  preferences.end();
+  String savedSSID = "";
+  String savedPassword = "";
+  String mode = "sta";
+
+  if (!loadWifiConfig(mode, savedSSID, savedPassword)) {
+    mode = "sta";
+  }
+  configuredWiFiMode = mode;
   savedStaSSID = savedSSID;
 
   if (configuredWiFiMode == "ap") {
@@ -294,8 +302,7 @@ bool connectToLocalWiFi(const String &ssid, const String &password) {
   Serial.print("Connecting to: ");
   Serial.println(ssid);
   WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false);
-  WiFi.setAutoReconnect(true);
+  WiFi.setSleepMode(WIFI_NONE_SLEEP);
   WiFi.begin(ssid.c_str(), password.c_str());
 
   unsigned long startedAt = millis();
@@ -323,12 +330,12 @@ bool connectToLocalWiFi(const String &ssid, const String &password) {
 void setupAccessPoint(bool isConfigurationPortal) {
   Serial.println("\n--- WiFi Access Point Mode ---");
 
-  uint32_t chipId = (uint32_t)(ESP.getEfuseMac() & 0xFFFFFF);
-  apSSID = "ESP32-RobotArm-" + String(chipId, HEX);
+  uint32_t chipId = ESP.getChipId();
+  apSSID = "ESP8266-RobotArm-" + String(chipId, HEX);
   apSSID.toUpperCase();
 
   WiFi.mode(WIFI_AP);
-  WiFi.setSleep(false);
+  WiFi.setSleepMode(WIFI_NONE_SLEEP);
 
   if (!WiFi.softAPConfig(AP_IP, AP_GATEWAY, AP_SUBNET)) {
     Serial.println("[ERROR] Failed to configure the access point address; restarting...");
@@ -423,38 +430,11 @@ void setupWebServer() {
     request->send(LittleFS, "/index.html", "text/html");
   });
 
-  // Start an asynchronous WiFi scan or return its results.
+  // Start a synchronous WiFi scan and return its results.
   server.on("/wifi-scan", HTTP_GET, [](AsyncWebServerRequest *request){
-    if (request->hasParam("start")) {
-      int scanStatus = WiFi.scanComplete();
-      if (scanStatus == WIFI_SCAN_RUNNING) {
-        request->send(200, "application/json", "{\"scanning\":true}");
-        return;
-      }
-
-      WiFi.scanDelete();
-      if (activeWiFiMode == "AP") {
-        // AP+STA mode keeps the setup hotspot available while the STA radio scans.
-        WiFi.mode(WIFI_AP_STA);
-        WiFi.setSleep(false);
-      }
-
-      if (WiFi.scanNetworks(true, true) == WIFI_SCAN_FAILED) {
-        request->send(500, "application/json", "{\"scanning\":false,\"error\":\"scan failed\"}");
-        return;
-      }
-
-      request->send(200, "application/json", "{\"scanning\":true}");
-      return;
-    }
-
-    int networkCount = WiFi.scanComplete();
-    if (networkCount == WIFI_SCAN_RUNNING) {
-      request->send(200, "application/json", "{\"scanning\":true}");
-      return;
-    }
-    if (networkCount == WIFI_SCAN_FAILED) {
-      request->send(500, "application/json", "{\"scanning\":false,\"error\":\"scan failed\"}");
+    int networkCount = WiFi.scanNetworks();
+    if (networkCount <= 0) {
+      request->send(200, "application/json", "{\"scanning\":false,\"networks\":[]}" );
       return;
     }
 
@@ -481,7 +461,7 @@ void setupWebServer() {
       JsonObject network = networks.createNestedObject();
       network["ssid"] = ssid;
       network["rssi"] = WiFi.RSSI(i);
-      network["secure"] = WiFi.encryptionType(i) != WIFI_AUTH_OPEN;
+      network["secure"] = WiFi.encryptionType(i) != ENC_TYPE_NONE;
     }
 
     String response;
@@ -542,13 +522,10 @@ void setupWebServer() {
       }
     }
 
-    preferences.begin("robot-wifi", false);
-    preferences.putString("mode", mode);
-    if (mode == "sta") {
-      preferences.putString("ssid", ssid);
-      preferences.putString("password", password);
+    if (!saveWifiConfig(mode, ssid, password)) {
+      request->send(500, "application/json", "{\"ok\":false,\"error\":\"save_failed\"}");
+      return;
     }
-    preferences.end();
 
     request->send(200, "application/json", "{\"ok\":true,\"restarting\":true}");
     scheduleRestart();
@@ -556,9 +533,7 @@ void setupWebServer() {
 
   // Clear stored WiFi settings and open the setup portal after restart.
   server.on("/wifi-reset", HTTP_POST, [](AsyncWebServerRequest *request){
-    preferences.begin("robot-wifi", false);
-    preferences.clear();
-    preferences.end();
+    clearWifiConfig();
     request->send(200, "application/json", "{\"ok\":true,\"restarting\":true}");
     scheduleRestart();
   });
@@ -797,16 +772,8 @@ void sendHeartbeat() {
 
 // Return the average RSSI of connected AP clients, or zero when unavailable.
 int getAverageClientRssi() {
-  wifi_sta_list_t stationList;
-  if (esp_wifi_ap_get_sta_list(&stationList) != ESP_OK || stationList.num == 0) {
-    return 0;
-  }
-
-  int totalRssi = 0;
-  for (int i = 0; i < stationList.num; ++i) {
-    totalRssi += stationList.sta[i].rssi;
-  }
-  return totalRssi / stationList.num;
+  // Not available on ESP8266 via public API; return 0 as fallback.
+  return 0;
 }
 
 // ========== Servo 1 control ==========
@@ -957,5 +924,6 @@ void enterDeepSleep() {
   delay(100);
 
   // Enter deep sleep. An external reset or wake source is required.
-  esp_deep_sleep_start();
+  ESP.deepSleep(0);
 }
+
